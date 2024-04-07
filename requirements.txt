@@ -1,3 +1,4 @@
 pyperclip
 paho-mqtt
 Pillow
+xkcdpass

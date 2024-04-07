@@ -6,17 +6,53 @@ import os
 import platform
 import tempfile
 import time
+import uuid
+import random
 
 import paho.mqtt.client as mqtt
 import pyperclip
 from PIL import Image
 from PIL import ImageGrab
 from PIL.PngImagePlugin import PngImageFile
+from xkcdpass import xkcd_password as xp
+
+
+def generate_topic_name():
+    words = xp.locate_wordfile()
+    mywords = xp.generate_wordlist(wordfile=words, min_length=4, max_length=8)
+    random_name = xp.generate_xkcdpassword(mywords, numwords=3, delimiter="-")
+    return random_name + "-" + str(random.randint(0, 100))
+
 
 def load_config(file_path):
     try:
         with open(file_path, 'r') as file:
             config = json.load(file)
+
+        if not config['mqtt'].get('client_id'):
+            config['mqtt']['client_id'] = str(uuid.uuid4())
+
+        if not config['mqtt'].get('topic'):
+            print("No MQTT topic found in the config.")
+            while True:
+                action = input("Do you want to (j)oin a topic or (c)reate a new one? ")
+                if action.lower() == 'j':
+                    topic = input("Enter the topic you want to join: ")
+                    break
+                elif action.lower() == 'c':
+                    topic = generate_topic_name()
+                    print(f"Created new topic: {topic}")
+                    break
+                elif action.lower() == 'a':
+                    return None
+                else:
+                    print("Invalid option. Please enter 'j' to join a topic, 'c' to create a new one or 'a' to abort.")
+
+            config['mqtt']['topic'] = topic
+
+            # Write the updated config back to the file
+            with open(file_path, 'w') as file:
+                json.dump(config, file)
         return config
     except FileNotFoundError:
         print("Config file not found.")
@@ -31,8 +67,6 @@ mqtt_config = config['mqtt']
 
 broker_address = mqtt_config['broker_address']
 broker_port = mqtt_config['broker_port']
-username = mqtt_config['username']
-password = mqtt_config['password']
 topic = mqtt_config['topic']
 client_id = mqtt_config['client_id']
 
@@ -56,7 +90,7 @@ class MQTTClientWithClipboard:
         clipboard_hash = hashlib.sha256(clipboard_data).hexdigest()
         if clipboard_hash != self.last_received_hash:
             if clipboard_data.startswith(b'image'):
-                print("Received: <image>")
+                print("Image received from broker!")
                 # Remove the 'image,' prefix and decode the base64 image
                 base64_image = clipboard_data[6:]
                 image_data = base64.b64decode(base64_image)
@@ -72,9 +106,9 @@ class MQTTClientWithClipboard:
                 # Delete the temporary file
                 os.unlink(temp.name)
             else:
+                print("Text received from broker!")
                 clipboard_text = clipboard_data.decode()
                 pyperclip.copy(clipboard_text)
-                print("Received:", clipboard_text)
             self.last_received_hash = clipboard_hash
 
 
@@ -106,7 +140,7 @@ try:
         if clipboard_hash != last_sent_hash:
         # Publish clipboard contents to MQTT broker
             mqttc.publish(topic, clipboard_data)
-            print("Sent:", clipboard_content)
+            print("Clipboard content sent to MQTT broker!")
             last_sent_hash = clipboard_hash
 
         time.sleep(5)  # Adjust this value as needed
