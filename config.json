@@ -1,0 +1,10 @@
+{
+  "mqtt": {
+    "broker_address": "broker.hivemq.com",
+    "broker_port": 1883,
+    "username": "",
+    "password": "",
+    "topic": "clipboard",
+    "client_id": "python-mqtt33"
+  }
+}
