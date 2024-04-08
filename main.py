@@ -6,14 +6,14 @@ import platform
 import tempfile
 import time
 import threading
-from getpass import getpass
+import paho.mqtt.client as mqtt
+import pyperclip
 
+from getpass import getpass
+from cryptography.fernet import Fernet, InvalidToken
 from PIL import Image
 from PIL import ImageGrab
 from PIL.PngImagePlugin import PngImageFile
-import paho.mqtt.client as mqtt
-import pyperclip
-from cryptography.fernet import Fernet, InvalidToken
 
 from config_loader import load_config
 from clipboard_payload import ClipboardPayload
@@ -67,12 +67,11 @@ class MQTTClientWithClipboard:
 
 
 class ClipboardMonitor(threading.Thread):
-    def __init__(self, mqttc, mqttc_wrapper, cipher, topic):
+    def __init__(self, mqttc_wrapper, topic, cipher):
         super().__init__()
-        self.mqttc = mqttc
         self.mqttc_wrapper = mqttc_wrapper
-        self.cipher = cipher
         self.topic = topic
+        self.cipher = cipher
         self.interval = 2
         self.running = True
 
@@ -96,7 +95,7 @@ class ClipboardMonitor(threading.Thread):
                 # Publish clipboard contents to MQTT broker
                 encrypted_content_str = self.cipher.encrypt(clipboard_content.encode()).decode()
                 clipboard_payload = ClipboardPayload(clipboard_hash, content_type, encrypted_content_str)
-                self.mqttc.publish(self.topic, clipboard_payload.to_json())
+                self.mqttc_wrapper.client.publish(self.topic, clipboard_payload.to_json())
                 print(f"Clipboard content ({content_type}) sent to portal!")
                 self.mqttc_wrapper.last_content_hash = clipboard_hash
 
@@ -131,7 +130,7 @@ def main():
         mqttc_wrapper.client.loop_start()
 
         # Start the clipboard monitor
-        clipboard_monitor = ClipboardMonitor(mqttc, mqttc_wrapper, cipher, topic)
+        clipboard_monitor = ClipboardMonitor(mqttc_wrapper, topic, cipher)
         clipboard_monitor.start()
 
         while True:
