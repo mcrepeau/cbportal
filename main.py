@@ -14,12 +14,10 @@ from PIL.PngImagePlugin import PngImageFile
 import paho.mqtt.client as mqtt
 import pyperclip
 from cryptography.fernet import Fernet, InvalidToken
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
 
 from config_loader import load_config
 from clipboard_payload import ClipboardPayload
+from utils import create_key_from_password
 
 
 class MQTTClientWithClipboard:
@@ -50,7 +48,7 @@ class MQTTClientWithClipboard:
 
         if clipboard_hash != self.last_content_hash:
             if clipboard_payload.type == 'image':
-                print("Image received from portal!")
+                print("Clipboard content (image) received from portal!")
                 image = Image.open(io.BytesIO(decrypted_clipboard_content))
                 # Save the image to a temporary file
                 with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp:
@@ -63,7 +61,7 @@ class MQTTClientWithClipboard:
                 # Delete the temporary file
                 os.unlink(temp.name)
             else:
-                print("Text received from portal!")
+                print("Clipboard content (text) received from portal!")
                 pyperclip.copy(decrypted_clipboard_content)
             self.last_content_hash = clipboard_hash
 
@@ -119,18 +117,8 @@ def main():
     # Prompt the user for a password
     password = getpass("Enter a password to encrypt & decrypt the clipboard content: ")
 
-    # Derive a key from the password
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=topic.encode(),
-        iterations=100000,
-        backend=default_backend()
-    )
-
-    key = base64.b64encode(kdf.derive(password.encode()))  # Key for Fernet must be 32 base64-encoded bytes
     # Create a cipher object
-    cipher = Fernet(key)
+    cipher = Fernet(create_key_from_password(password, topic))
 
     try:
         # Initialize MQTT client
