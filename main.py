@@ -61,6 +61,20 @@ def load_config(file_path):
         print("Invalid JSON format in config file.")
         return None
 
+class ClipboardPayload:
+    def __init__(self, content_hash, content_type, content):
+        self.hash = content_hash
+        self.type = content_type
+        self.content = content
+
+    def to_json(self):
+        return json.dumps(self.__dict__)
+
+    @classmethod
+    def from_json(cls, json_str):
+        data = json.loads(json_str)
+        return cls(data['hash'], data['type'], data['content'])
+
 
 class MQTTClientWithClipboard:
     def __init__(self, client, topic):
@@ -78,13 +92,13 @@ class MQTTClientWithClipboard:
         client.subscribe(self.topic)
 
     def on_message(self, client, userdata, message):
-        clipboard_data = message.payload
-        clipboard_hash = hashlib.sha256(clipboard_data).hexdigest()
+        clipboard_payload = ClipboardPayload.from_json(message.payload.decode())
+        clipboard_hash = clipboard_payload.hash
         if clipboard_hash != self.last_content_hash:
-            if clipboard_data.startswith(b'image'):
+            if clipboard_payload.type == 'image':
                 print("Image received from broker!")
                 # Remove the 'image,' prefix and decode the base64 image
-                base64_image = clipboard_data[6:]
+                base64_image = clipboard_payload.content
                 image_data = base64.b64decode(base64_image)
                 image = Image.open(io.BytesIO(image_data))
                 # Save the image to a temporary file
@@ -99,7 +113,7 @@ class MQTTClientWithClipboard:
                 os.unlink(temp.name)
             else:
                 print("Text received from broker!")
-                clipboard_text = clipboard_data.decode()
+                clipboard_text = clipboard_payload.content
                 pyperclip.copy(clipboard_text)
             self.last_content_hash = clipboard_hash
 
@@ -132,13 +146,14 @@ def main():
                     with io.BytesIO() as output:
                         im.save(output, format="PNG")
                         image_data = output.getvalue()
-                        clipboard_content = "image," + base64.b64encode(image_data).decode()
+                        clipboard_content = base64.b64encode(image_data).decode()
             
             clipboard_data = clipboard_content.encode()
             clipboard_hash = hashlib.sha256(clipboard_data).hexdigest()
             if clipboard_hash != mqttc_wrapper.last_content_hash:
-            # Publish clipboard contents to MQTT broker
-                mqttc.publish(topic, clipboard_data)
+                # Publish clipboard contents to MQTT broker
+                clipboard_payload = ClipboardPayload(clipboard_hash, 'image' if im is not None else 'text', clipboard_content)
+                mqttc.publish(topic, clipboard_payload.to_json())
                 print("Clipboard content sent to MQTT broker!")
                 mqttc_wrapper.last_content_hash = clipboard_hash
 
