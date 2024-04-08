@@ -14,7 +14,13 @@ import pyperclip
 from PIL import Image
 from PIL import ImageGrab
 from PIL.PngImagePlugin import PngImageFile
+from getpass import getpass
+from os import urandom
 from xkcdpass import xkcd_password as xp
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
 
 
 def generate_topic_name():
@@ -28,9 +34,6 @@ def load_config(file_path):
     try:
         with open(file_path, 'r') as file:
             config = json.load(file)
-
-        if not config['mqtt'].get('client_id'):
-            config['mqtt']['client_id'] = str(uuid.uuid4())
 
         if not config['mqtt'].get('topic'):
             print("No MQTT topic found in the config.")
@@ -77,16 +80,17 @@ class ClipboardPayload:
 
 
 class MQTTClientWithClipboard:
-    def __init__(self, client, topic):
+    def __init__(self, client, topic, cipher):
         self.client = client
         self.topic = topic
+        self.cipher = cipher
         self.last_content_hash = None
         self.client.on_message = self.on_message
         self.client.on_connect = self.on_connect
 
     # The callback for when the client receives a CONNACK response from the server.
     def on_connect(self, client, userdata, flags, reason_code, properties):
-        print(f"Connected with result code {reason_code}")
+        print(f"Connected with {reason_code}")
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
         client.subscribe(self.topic)
@@ -94,11 +98,12 @@ class MQTTClientWithClipboard:
     def on_message(self, client, userdata, message):
         clipboard_payload = ClipboardPayload.from_json(message.payload.decode())
         clipboard_hash = clipboard_payload.hash
+        encrypted_clipboard_content = clipboard_payload.content.encode()
         if clipboard_hash != self.last_content_hash:
             if clipboard_payload.type == 'image':
-                print("Image received from broker!")
+                print("Image received from portal!")
                 # Remove the 'image,' prefix and decode the base64 image
-                base64_image = clipboard_payload.content
+                base64_image = self.cipher.decrypt(encrypted_clipboard_content).decode()
                 image_data = base64.b64decode(base64_image)
                 image = Image.open(io.BytesIO(image_data))
                 # Save the image to a temporary file
@@ -112,8 +117,8 @@ class MQTTClientWithClipboard:
                 # Delete the temporary file
                 os.unlink(temp.name)
             else:
-                print("Text received from broker!")
-                clipboard_text = clipboard_payload.content
+                print("Text received from portal!")
+                clipboard_text = self.cipher.decrypt(encrypted_clipboard_content).decode()
                 pyperclip.copy(clipboard_text)
             self.last_content_hash = clipboard_hash
 
@@ -125,11 +130,26 @@ def main():
     broker_address = mqtt_config['broker_address']
     broker_port = mqtt_config['broker_port']
     topic = mqtt_config['topic']
-    client_id = mqtt_config['client_id']
+
+    # Prompt the user for a password
+    password = getpass("Enter a password to encrypt & decrypt the clipboard content: ")
+
+    # Derive a key from the password
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=urandom(16),
+        iterations=100000,
+        backend=default_backend()
+    )
+
+    key = base64.b64encode(kdf.derive(password.encode()))  # Key for Fernet must be 32 base64-encoded bytes
+    # Create a cipher object
+    cipher = Fernet(key)
 
     # Initialize MQTT client
     mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-    mqttc_wrapper = MQTTClientWithClipboard(mqttc, topic)
+    mqttc_wrapper = MQTTClientWithClipboard(mqttc, topic, cipher)
     mqttc_wrapper.client.connect(broker_address, broker_port, 60)
 
     # Start the MQTT loop
@@ -142,7 +162,7 @@ def main():
             im = ImageGrab.grabclipboard()
             if im is not None:
                 if isinstance(im, PngImageFile):
-                    print("Image detected in clipboard, size: ", im.size, ",format: ", im.format)
+                    #print("Image detected in clipboard, size: ", im.size, ",format: ", im.format)
                     with io.BytesIO() as output:
                         im.save(output, format="PNG")
                         image_data = output.getvalue()
@@ -152,9 +172,10 @@ def main():
             clipboard_hash = hashlib.sha256(clipboard_data).hexdigest()
             if clipboard_hash != mqttc_wrapper.last_content_hash:
                 # Publish clipboard contents to MQTT broker
-                clipboard_payload = ClipboardPayload(clipboard_hash, 'image' if im is not None else 'text', clipboard_content)
+                encrypted_content_str = cipher.encrypt(clipboard_content.encode()).decode()
+                clipboard_payload = ClipboardPayload(clipboard_hash, 'image' if im is not None else 'text', encrypted_content_str)
                 mqttc.publish(topic, clipboard_payload.to_json())
-                print("Clipboard content sent to MQTT broker!")
+                print("Clipboard content sent to portal!")
                 mqttc_wrapper.last_content_hash = clipboard_hash
 
             time.sleep(5)  # Adjust this value as needed
