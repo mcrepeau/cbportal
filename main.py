@@ -1,81 +1,24 @@
 import base64
 import hashlib
 import io
-import json
 import os
 import platform
 import tempfile
 import time
-import uuid
-import random
+from getpass import getpass
 
-import paho.mqtt.client as mqtt
-import pyperclip
 from PIL import Image
 from PIL import ImageGrab
 from PIL.PngImagePlugin import PngImageFile
-from getpass import getpass
-from xkcdpass import xkcd_password as xp
+import paho.mqtt.client as mqtt
+import pyperclip
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 
-
-def generate_topic_name():
-    words = xp.locate_wordfile()
-    mywords = xp.generate_wordlist(wordfile=words, min_length=4, max_length=8)
-    random_name = xp.generate_xkcdpassword(mywords, numwords=3, delimiter="-")
-    return random_name + "-" + str(random.randint(0, 100))
-
-
-def load_config(file_path):
-    try:
-        with open(file_path, 'r') as file:
-            config = json.load(file)
-
-        if not config['mqtt'].get('topic'):
-            print("No MQTT topic found in the config.")
-            while True:
-                action = input("Do you want to (j)oin a topic or (c)reate a new one? ")
-                if action.lower() == 'j':
-                    topic = input("Enter the topic you want to join: ")
-                    break
-                elif action.lower() == 'c':
-                    topic = generate_topic_name()
-                    print(f"Created new topic: {topic}")
-                    break
-                elif action.lower() == 'a':
-                    return None
-                else:
-                    print("Invalid option. Please enter 'j' to join a topic, 'c' to create a new one or 'a' to abort.")
-
-            config['mqtt']['topic'] = topic
-
-            # Write the updated config back to the file
-            with open(file_path, 'w') as file:
-                json.dump(config, file)
-        return config
-    except FileNotFoundError:
-        print("Config file not found.")
-        return None
-    except json.JSONDecodeError:
-        print("Invalid JSON format in config file.")
-        return None
-
-class ClipboardPayload:
-    def __init__(self, content_hash, content_type, content):
-        self.hash = content_hash
-        self.type = content_type
-        self.content = content
-
-    def to_json(self):
-        return json.dumps(self.__dict__)
-
-    @classmethod
-    def from_json(cls, json_str):
-        data = json.loads(json_str)
-        return cls(data['hash'], data['type'], data['content'])
+from config_loader import load_config
+from clipboard_payload import ClipboardPayload
 
 
 class MQTTClientWithClipboard:
