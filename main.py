@@ -15,9 +15,8 @@ from PIL import Image
 from PIL import ImageGrab
 from PIL.PngImagePlugin import PngImageFile
 from getpass import getpass
-from os import urandom
 from xkcdpass import xkcd_password as xp
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
@@ -99,13 +98,16 @@ class MQTTClientWithClipboard:
         clipboard_payload = ClipboardPayload.from_json(message.payload.decode())
         clipboard_hash = clipboard_payload.hash
         encrypted_clipboard_content = clipboard_payload.content.encode()
+        try:
+            decrypted_clipboard_content = self.cipher.decrypt(encrypted_clipboard_content).decode()
+        except InvalidToken:
+            print("Could not decrypt clipboard. The content may have been tampered with or the wrong key was used.")
+            return None
+
         if clipboard_hash != self.last_content_hash:
             if clipboard_payload.type == 'image':
                 print("Image received from portal!")
-                # Remove the 'image,' prefix and decode the base64 image
-                base64_image = self.cipher.decrypt(encrypted_clipboard_content).decode()
-                image_data = base64.b64decode(base64_image)
-                image = Image.open(io.BytesIO(image_data))
+                image = Image.open(io.BytesIO(decrypted_clipboard_content))
                 # Save the image to a temporary file
                 with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp:
                     image.save(temp.name)
@@ -118,8 +120,7 @@ class MQTTClientWithClipboard:
                 os.unlink(temp.name)
             else:
                 print("Text received from portal!")
-                clipboard_text = self.cipher.decrypt(encrypted_clipboard_content).decode()
-                pyperclip.copy(clipboard_text)
+                pyperclip.copy(decrypted_clipboard_content)
             self.last_content_hash = clipboard_hash
 
 
