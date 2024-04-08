@@ -62,14 +62,6 @@ def load_config(file_path):
         return None
 
 
-config = load_config('config.json')
-mqtt_config = config['mqtt']
-
-broker_address = mqtt_config['broker_address']
-broker_port = mqtt_config['broker_port']
-topic = mqtt_config['topic']
-client_id = mqtt_config['client_id']
-
 class MQTTClientWithClipboard:
     def __init__(self, client, topic):
         self.client = client
@@ -112,41 +104,51 @@ class MQTTClientWithClipboard:
             self.last_content_hash = clipboard_hash
 
 
-# Initialize MQTT client
-mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-mqttc_wrapper = MQTTClientWithClipboard(mqttc, topic)
-mqttc_wrapper.client.connect("mqtt.eclipseprojects.io", 1883, 60)
+def main():
+    config = load_config('config.json')
+    mqtt_config = config['mqtt']
 
-# Start the MQTT loop
-mqttc_wrapper.client.loop_start()
+    broker_address = mqtt_config['broker_address']
+    broker_port = mqtt_config['broker_port']
+    topic = mqtt_config['topic']
+    client_id = mqtt_config['client_id']
 
-last_sent_hash = ""
+    # Initialize MQTT client
+    mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    mqttc_wrapper = MQTTClientWithClipboard(mqttc, topic)
+    mqttc_wrapper.client.connect(broker_address, broker_port, 60)
 
-try:
-    while True:
-        # Get clipboard contents
-        clipboard_content = pyperclip.paste()
-        im = ImageGrab.grabclipboard()
-        if im is not None:
-            if isinstance(im, PngImageFile):
-                print("Image detected in clipboard, size: ", im.size, ",format: ", im.format)
-                with io.BytesIO() as output:
-                    im.save(output, format="PNG")
-                    image_data = output.getvalue()
-                    clipboard_content = "image," + base64.b64encode(image_data).decode()
-        
-        clipboard_data = clipboard_content.encode()
-        clipboard_hash = hashlib.sha256(clipboard_data).hexdigest()
-        if clipboard_hash != mqttc_wrapper.last_content_hash:
-        # Publish clipboard contents to MQTT broker
-            mqttc.publish(topic, clipboard_data)
-            print("Clipboard content sent to MQTT broker!")
-            mqttc_wrapper.last_content_hash = clipboard_hash
+    # Start the MQTT loop
+    mqttc_wrapper.client.loop_start()
 
-        time.sleep(5)  # Adjust this value as needed
-except KeyboardInterrupt:
-    pass
+    try:
+        while True:
+            # Get clipboard contents
+            clipboard_content = pyperclip.paste()
+            im = ImageGrab.grabclipboard()
+            if im is not None:
+                if isinstance(im, PngImageFile):
+                    print("Image detected in clipboard, size: ", im.size, ",format: ", im.format)
+                    with io.BytesIO() as output:
+                        im.save(output, format="PNG")
+                        image_data = output.getvalue()
+                        clipboard_content = "image," + base64.b64encode(image_data).decode()
+            
+            clipboard_data = clipboard_content.encode()
+            clipboard_hash = hashlib.sha256(clipboard_data).hexdigest()
+            if clipboard_hash != mqttc_wrapper.last_content_hash:
+            # Publish clipboard contents to MQTT broker
+                mqttc.publish(topic, clipboard_data)
+                print("Clipboard content sent to MQTT broker!")
+                mqttc_wrapper.last_content_hash = clipboard_hash
 
-# Stop the MQTT loop and disconnect from the broker
-mqttc.loop_stop()
-mqttc.disconnect()
+            time.sleep(5)  # Adjust this value as needed
+    except KeyboardInterrupt:
+        pass
+
+    # Stop the MQTT loop and disconnect from the broker
+    mqttc.loop_stop()
+    mqttc.disconnect()
+
+if __name__ == "__main__":
+    main()
