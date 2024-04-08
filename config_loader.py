@@ -1,7 +1,23 @@
 import json
+import os
 from utils import generate_topic_name
 
 def load_config(file_path):
+    # Check if the config file exists
+    if not os.path.exists(file_path):
+        # If it doesn't exist, create it with initial values
+        config = {
+            'mqtt': {
+                'broker_address': 'broker.hivemq.com',
+                'broker_port': 1883,
+                'topic': None
+            }
+        }
+
+        # Write the config to the file
+        with open(file_path, 'w') as file:
+            json.dump(config, file, indent=4)
+
     try:
         with open(file_path, 'r') as file:
             config = json.load(file)

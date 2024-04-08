@@ -11,6 +11,7 @@ def generate_topic_name():
     random_name = xp.generate_xkcdpassword(mywords, numwords=3, delimiter="-")
     return random_name + "-" + str(random.randint(0, 100))
 
+
 def create_key_from_password(password, topic):
     # Derive a key from the password
     kdf = PBKDF2HMAC(
