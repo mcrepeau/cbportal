@@ -138,7 +138,7 @@ def main():
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=urandom(16),
+        salt=topic.encode(),
         iterations=100000,
         backend=default_backend()
     )
