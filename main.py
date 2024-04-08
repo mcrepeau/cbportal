@@ -81,22 +81,23 @@ class ClipboardMonitor(threading.Thread):
             # Get clipboard contents
             clipboard_content = pyperclip.paste()
             im = ImageGrab.grabclipboard()
+            content_type = 'text'
             if im is not None:
                 if isinstance(im, PngImageFile):
-                    #print("Image detected in clipboard, size: ", im.size, ",format: ", im.format)
                     with io.BytesIO() as output:
                         im.save(output, format="PNG")
                         image_data = output.getvalue()
                         clipboard_content = base64.b64encode(image_data).decode()
+                    content_type = 'image'
             
             clipboard_data = clipboard_content.encode()
             clipboard_hash = hashlib.sha256(clipboard_data).hexdigest()
             if clipboard_hash != self.mqttc_wrapper.last_content_hash:
                 # Publish clipboard contents to MQTT broker
                 encrypted_content_str = self.cipher.encrypt(clipboard_content.encode()).decode()
-                clipboard_payload = ClipboardPayload(clipboard_hash, 'image' if im is not None else 'text', encrypted_content_str)
+                clipboard_payload = ClipboardPayload(clipboard_hash, content_type, encrypted_content_str)
                 self.mqttc.publish(self.topic, clipboard_payload.to_json())
-                print("Clipboard content sent to portal!")
+                print(f"Clipboard content ({content_type}) sent to portal!")
                 self.mqttc_wrapper.last_content_hash = clipboard_hash
 
             time.sleep(self.interval)  # Local clipboard monitoring interval
