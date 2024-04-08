@@ -74,7 +74,7 @@ class MQTTClientWithClipboard:
     def __init__(self, client, topic):
         self.client = client
         self.topic = topic
-        self.last_received_hash = None
+        self.last_content_hash = None
         self.client.on_message = self.on_message
         self.client.on_connect = self.on_connect
 
@@ -88,7 +88,7 @@ class MQTTClientWithClipboard:
     def on_message(self, client, userdata, message):
         clipboard_data = message.payload
         clipboard_hash = hashlib.sha256(clipboard_data).hexdigest()
-        if clipboard_hash != self.last_received_hash:
+        if clipboard_hash != self.last_content_hash:
             if clipboard_data.startswith(b'image'):
                 print("Image received from broker!")
                 # Remove the 'image,' prefix and decode the base64 image
@@ -109,7 +109,7 @@ class MQTTClientWithClipboard:
                 print("Text received from broker!")
                 clipboard_text = clipboard_data.decode()
                 pyperclip.copy(clipboard_text)
-            self.last_received_hash = clipboard_hash
+            self.last_content_hash = clipboard_hash
 
 
 # Initialize MQTT client
@@ -137,11 +137,11 @@ try:
         
         clipboard_data = clipboard_content.encode()
         clipboard_hash = hashlib.sha256(clipboard_data).hexdigest()
-        if clipboard_hash != last_sent_hash:
+        if clipboard_hash != mqttc_wrapper.last_content_hash:
         # Publish clipboard contents to MQTT broker
             mqttc.publish(topic, clipboard_data)
             print("Clipboard content sent to MQTT broker!")
-            last_sent_hash = clipboard_hash
+            mqttc_wrapper.last_content_hash = clipboard_hash
 
         time.sleep(5)  # Adjust this value as needed
 except KeyboardInterrupt:
