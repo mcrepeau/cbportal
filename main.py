@@ -8,7 +8,7 @@ import time
 import threading
 import paho.mqtt.client as mqtt
 import pyperclip
-import clipboard
+import win32clipboard
 
 from getpass import getpass
 from cryptography.fernet import Fernet, InvalidToken
@@ -61,9 +61,19 @@ class MQTTClientWithClipboard:
                 elif platform.system() == "Linux":
                     os.system(f'xclip -selection clipboard -t image/png -i {temp.name}')
                 elif platform.system() == "Windows":
-                    with open(temp.name, 'rb') as file:
-                        image = file.read()
-                    clipboard.set_image(image)
+                    # Open the image file
+                    output = io.BytesIO()
+                    image.save(output, "BMP")
+                    data = output.getvalue()[14:]
+                    output.close()
+
+                    # Open the clipboard
+                    win32clipboard.OpenClipboard()
+                    win32clipboard.EmptyClipboard()
+                    # Set the data to clipboard
+                    win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+                    # Close the clipboard
+                    win32clipboard.CloseClipboard()
                 # Delete the temporary file
                 os.unlink(temp.name)
             else:
