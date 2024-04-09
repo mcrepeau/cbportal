@@ -2,6 +2,11 @@
 
 Clipboard Portal is a Python application that synchronizes clipboard content across multiple devices using MQTT protocol. It supports both text and image content.
 
+## Use cases
+
+- When using a VM with no clipboard sharing capabilities with the host machine
+- When wanting to copy-paste data between 2 (or more!) computers
+
 ## Features
 
 - Synchronizes clipboard content in real-time.
@@ -11,7 +16,7 @@ Clipboard Portal is a Python application that synchronizes clipboard content acr
 ## Requirements
 
 - Python 3.6 or higher
-- Python packages: paho-mqtt, cryptography, pyperclip, pillow
+- Python packages: paho-mqtt, cryptography, pyperclip, pillow, pywin32 (on Windows)
 
 ## Installation
 

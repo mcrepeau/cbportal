@@ -8,7 +8,8 @@ import time
 import threading
 import paho.mqtt.client as mqtt
 import pyperclip
-import win32clipboard
+if platform.system() == "Windows":
+    import win32clipboard
 
 from getpass import getpass
 from cryptography.fernet import Fernet, InvalidToken
