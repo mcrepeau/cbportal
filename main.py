@@ -106,6 +106,10 @@ class ClipboardMonitor(threading.Thread):
                         clipboard_content = base64.b64encode(image_data).decode()
                     content_type = 'image'
             
+            # Skip if clipboard_content is blank
+            if content_type == 'text' and not clipboard_content.strip():
+                continue
+
             clipboard_data = clipboard_content.encode()
             clipboard_hash = hashlib.sha256(clipboard_data).hexdigest()
             if clipboard_hash != self.mqttc_wrapper.last_content_hash:
