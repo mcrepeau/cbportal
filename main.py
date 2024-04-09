@@ -42,7 +42,7 @@ class MQTTClientWithClipboard:
         clipboard_hash = clipboard_payload.hash
         encrypted_clipboard_content = clipboard_payload.content.encode()
         try:
-            decrypted_clipboard_content = self.cipher.decrypt(encrypted_clipboard_content).decode()
+            decrypted_clipboard_content = self.cipher.decrypt(encrypted_clipboard_content)
         except InvalidToken:
             print("Could not decrypt clipboard. The content may have been tampered with or the wrong key was used.")
             return None
@@ -50,7 +50,8 @@ class MQTTClientWithClipboard:
         if clipboard_hash != self.last_content_hash:
             if clipboard_payload.type == 'image':
                 print("Clipboard content (image) received from portal!")
-                image = Image.open(io.BytesIO(decrypted_clipboard_content))
+                image_data = base64.b64decode(decrypted_clipboard_content)
+                image = Image.open(io.BytesIO(image_data))
                 # Save the image to a temporary file
                 with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp:
                     image.save(temp.name)
@@ -67,7 +68,7 @@ class MQTTClientWithClipboard:
                 os.unlink(temp.name)
             else:
                 print("Clipboard content (text) received from portal!")
-                pyperclip.copy(decrypted_clipboard_content)
+                pyperclip.copy(decrypted_clipboard_content.decode())
             self.last_content_hash = clipboard_hash
 
 

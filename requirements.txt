@@ -3,3 +3,4 @@ paho-mqtt
 Pillow
 xkcdpass
 cryptography
+clipboard
