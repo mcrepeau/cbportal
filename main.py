@@ -8,6 +8,7 @@ import time
 import threading
 import paho.mqtt.client as mqtt
 import pyperclip
+import argparse
 if platform.system() == "Windows":
     import win32clipboard
 
@@ -20,6 +21,7 @@ from PIL.PngImagePlugin import PngImageFile
 from config_loader import load_config
 from clipboard_payload import ClipboardPayload
 from utils import create_key_from_password
+from version import __version__
 
 
 class MQTTClientWithClipboard:
@@ -83,6 +85,31 @@ class MQTTClientWithClipboard:
             self.last_content_hash = clipboard_hash
 
 
+def process_clipboard_content(cipher):
+    # Get clipboard contents
+    clipboard_content = pyperclip.paste()
+    im = ImageGrab.grabclipboard()
+    content_type = 'text'
+    if im is not None:
+        if isinstance(im, PngImageFile):
+            with io.BytesIO() as output:
+                im.save(output, format="PNG")
+                image_data = output.getvalue()
+                clipboard_content = base64.b64encode(image_data).decode()
+            content_type = 'image'
+    
+    # Skip if clipboard_content is blank
+    if content_type == 'text' and not clipboard_content.strip():
+        return None
+
+    clipboard_data = clipboard_content.encode()
+    clipboard_hash = hashlib.sha256(clipboard_data).hexdigest()
+    encrypted_content_str = cipher.encrypt(clipboard_data).decode()
+    clipboard_payload = ClipboardPayload(clipboard_hash, content_type, encrypted_content_str)
+
+    return clipboard_payload
+
+
 class ClipboardMonitor(threading.Thread):
     def __init__(self, mqttc_wrapper, topic, cipher):
         super().__init__()
@@ -94,31 +121,12 @@ class ClipboardMonitor(threading.Thread):
 
     def run(self):
         while self.running:
-            # Get clipboard contents
-            clipboard_content = pyperclip.paste()
-            im = ImageGrab.grabclipboard()
-            content_type = 'text'
-            if im is not None:
-                if isinstance(im, PngImageFile):
-                    with io.BytesIO() as output:
-                        im.save(output, format="PNG")
-                        image_data = output.getvalue()
-                        clipboard_content = base64.b64encode(image_data).decode()
-                    content_type = 'image'
-            
-            # Skip if clipboard_content is blank
-            if content_type == 'text' and not clipboard_content.strip():
-                continue
-
-            clipboard_data = clipboard_content.encode()
-            clipboard_hash = hashlib.sha256(clipboard_data).hexdigest()
-            if clipboard_hash != self.mqttc_wrapper.last_content_hash:
+            clipboard_payload = process_clipboard_content(self.cipher)
+            if clipboard_payload.hash != self.mqttc_wrapper.last_content_hash:
                 # Publish clipboard contents to MQTT broker
-                encrypted_content_str = self.cipher.encrypt(clipboard_content.encode()).decode()
-                clipboard_payload = ClipboardPayload(clipboard_hash, content_type, encrypted_content_str)
                 self.mqttc_wrapper.client.publish(self.topic, clipboard_payload.to_json())
-                print(f"Clipboard content ({content_type}) sent to portal!")
-                self.mqttc_wrapper.last_content_hash = clipboard_hash
+                print(f"Clipboard content ({clipboard_payload.type}) sent to portal!")
+                self.mqttc_wrapper.last_content_hash = clipboard_payload.hash
 
             time.sleep(self.interval)  # Local clipboard monitoring interval
 
@@ -128,6 +136,12 @@ class ClipboardMonitor(threading.Thread):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--version', action='version', version='%(prog)s ' + __version__)
+    parser.add_argument('---mode', choices=['send', 'receive', 'sync'], help='Mode of operation', default='sync')
+
+    args = parser.parse_args()
+
     config = load_config('config.json')
     mqtt_config = config['mqtt']
 
@@ -141,31 +155,46 @@ def main():
     # Create a cipher object
     cipher = Fernet(create_key_from_password(password, topic))
 
-    try:
-        # Initialize MQTT client
-        mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        mqttc_wrapper = MQTTClientWithClipboard(mqttc, topic, cipher)
-        mqttc_wrapper.client.connect(broker_address, broker_port, 60)
+    # Initialize MQTT client
+    mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    mqttc_wrapper = MQTTClientWithClipboard(mqttc, topic, cipher)
 
-        # Start the MQTT loop
-        mqttc_wrapper.client.loop_start()
-
-        # Start the clipboard monitor
-        clipboard_monitor = ClipboardMonitor(mqttc_wrapper, topic, cipher)
-        clipboard_monitor.start()
-
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("Exiting...")
-    finally:
-        # Stop the clipboard monitor
-        clipboard_monitor.stop()
-        clipboard_monitor.join()
-
-        # Stop the MQTT loop and disconnect from the broker
+    if args.mode == 'send':
+        clipboard_payload = process_clipboard_content(cipher)
+        mqttc.connect(broker_address, broker_port, 60)
+        mqttc.publish(topic, clipboard_payload.to_json(), retain=True)
+        mqttc.disconnect()
+    elif args.mode == 'receive':
+        mqttc.on_message = mqttc_wrapper.on_message
+        mqttc.connect(broker_address, broker_port, 60)
+        mqttc.subscribe(topic)
+        mqttc.loop_start()
+        time.sleep(2)  # wait for a short while to receive messages
         mqttc.loop_stop()
         mqttc.disconnect()
+    else:  # args.mode == 'sync'
+        try:
+            mqttc_wrapper.client.connect(broker_address, broker_port, 60)
+
+            # Start the MQTT loop
+            mqttc_wrapper.client.loop_start()
+
+            # Start the clipboard monitor
+            clipboard_monitor = ClipboardMonitor(mqttc_wrapper, topic, cipher)
+            clipboard_monitor.start()
+
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("Exiting...")
+        finally:
+            # Stop the clipboard monitor
+            clipboard_monitor.stop()
+            clipboard_monitor.join()
+
+            # Stop the MQTT loop and disconnect from the broker
+            mqttc.loop_stop()
+            mqttc.disconnect()
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,0 @@
-pyperclip
-paho-mqtt
-Pillow
-xkcdpass
-cryptography
-pywin32

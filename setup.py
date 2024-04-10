@@ -1,8 +1,9 @@
 from setuptools import setup, find_packages
+from version import __version__
 
 setup(
     name='cbportal',
-    version='1.0.0',
+    version=__version__,
     url='https://github.com/mcrepeau/cbportal.git',
     author='Matthieu Crépeau',
     author_email='creposukre@gmail.com',
