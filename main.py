@@ -122,7 +122,7 @@ class ClipboardMonitor(threading.Thread):
     def run(self):
         while self.running:
             clipboard_payload = process_clipboard_content(self.cipher)
-            if clipboard_payload.hash != self.mqttc_wrapper.last_content_hash:
+            if clipboard_payload and clipboard_payload.hash != self.mqttc_wrapper.last_content_hash:
                 # Publish clipboard contents to MQTT broker
                 self.mqttc_wrapper.client.publish(self.topic, clipboard_payload.to_json())
                 print(f"Clipboard content ({clipboard_payload.type}) sent to portal!")
