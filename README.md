@@ -25,7 +25,7 @@ Clipboard Portal is a Python application that synchronizes clipboard content acr
 2. Navigate to the project directory:
 
 3. Install the required Python packages:
-`pip install -r requirements.txt`
+`pip3 install .`
 
 ## Usage
 

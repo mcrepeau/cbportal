@@ -1,6 +1,6 @@
 import json
 import os
-from utils import generate_topic_name
+from .utils import generate_topic_name
 
 def load_config(file_path):
     # Check if the config file exists

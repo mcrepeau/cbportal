@@ -18,10 +18,10 @@ from PIL import Image
 from PIL import ImageGrab
 from PIL.PngImagePlugin import PngImageFile
 
-from config_loader import load_config
-from clipboard_payload import ClipboardPayload
-from utils import create_key_from_password
-from version import __version__
+from .config_loader import load_config
+from .clipboard_payload import ClipboardPayload
+from .utils import create_key_from_password
+from .version import __version__
 
 
 class MQTTClientWithClipboard:

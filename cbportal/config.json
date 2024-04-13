@@ -1,0 +1,1 @@
+{"mqtt": {"broker_address": "broker.hivemq.com", "broker_port": 1883, "topic": "this-is-a-test-32"}}
