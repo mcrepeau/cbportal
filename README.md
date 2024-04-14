@@ -30,7 +30,7 @@ Clipboard Portal is a Python application that synchronizes clipboard content acr
 ## Usage
 
 1. Run the application:
-`python main.py`
+`cbportal`
 
 2. Enter your MQTT broker details and password when prompted.
 
