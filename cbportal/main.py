@@ -142,7 +142,7 @@ def main():
 
     args = parser.parse_args()
 
-    config = load_config('config.json')
+    config = load_config()
     mqtt_config = config['mqtt']
 
     broker_address = mqtt_config['broker_address']

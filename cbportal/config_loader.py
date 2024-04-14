@@ -2,7 +2,11 @@ import json
 import os
 from .utils import generate_topic_name
 
-def load_config(file_path):
+config_file_name = '.cbportal_config.json'
+
+def load_config():
+    home_dir = os.path.expanduser("~")
+    file_path = os.path.join(home_dir, config_file_name)
     # Check if the config file exists
     if not os.path.exists(file_path):
         # If it doesn't exist, create it with initial values
