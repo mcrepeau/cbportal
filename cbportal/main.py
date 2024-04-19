@@ -138,7 +138,7 @@ class ClipboardMonitor(threading.Thread):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--version', action='version', version='%(prog)s ' + __version__)
-    parser.add_argument('---mode', choices=['send', 'receive', 'sync'], help='Mode of operation', default='sync')
+    parser.add_argument('--mode', choices=['send', 'receive', 'sync'], help='Mode of operation', default='sync')
 
     args = parser.parse_args()
 
